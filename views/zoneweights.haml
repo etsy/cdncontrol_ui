@@ -1,0 +1,222 @@
+:javascript
+  $(function(){
+        var changes = new Object();
+        var _updateSlider = function( event, ui ) {
+            #{"max_weights = 15 * #{@adjusted_weights.length}"}
+            #{
+               @adjusted_weights.map{|k,v|"#{k}_serve_mode = document.getElementById('#{@zone}_#{k}_select').options[document.getElementById('#{@zone}_#{k}_select').selectedIndex].text;"}.join("\n")
+              }
+            #{"cdn_#{@adjusted_weights.to_a.first[0]} = ui.values[0];"}
+            #{"cdn_#{@adjusted_weights.to_a.last[0]} =  100 - ui.values[1];"}
+            #{
+              @adjusted_weights.to_a[1..-2].map{|w|"cdn_#{w[0]} = 100 - (cdn_#{@adjusted_weights.to_a.first[0]} + cdn_#{@adjusted_weights.to_a.last[0]});"}.join("\n")
+            }
+            #{
+                @adjusted_weights.to_a.map{|w|"$('##{@zone}_#{w[0]}').html(cdn_#{w[0]} + '%');"}.join("\n")
+             }
+         }
+
+        $('#slider#{@zone}').slider({
+            range: true,
+            values: [#{@adjusted_weights.to_a[0][1][:weight].to_f}, #{@adjusted_weights.to_a[0][1][:weight].to_f + @adjusted_weights.to_a[1][1][:weight].to_f}],
+            min: 0,
+            max: 100,
+            step: 1,
+            slide: _updateSlider
+        });
+
+
+        function processChanges(){
+
+          var change_query_string = "";
+
+          #{
+            @weights.map do |k,v|
+             "changes['#{k}'] = new Object();
+              changes['#{k}']['mode'] = [];
+              changes['#{k}']['weight'] = [];
+             "
+            end.join("\n")
+          }
+
+          #{
+             "total_weight = #{15 * @adjusted_weights.length}
+             max_weight = 0"
+          }
+
+          change_query_string = "?modes="
+
+          #{
+            @weights.map do |k,v|
+              "old_mode_#{k} = '#{v[:serve_mode]}'
+               mode_#{k} = document.getElementById('#{@zone}_#{k}_select').options[document.getElementById('#{@zone}_#{k}_select').selectedIndex].text
+               if (old_mode_#{k} != mode_#{k}){
+                  changes['#{k}']['mode'] = [old_mode_#{k},mode_#{k}]
+                  change_query_string = change_query_string + '#{k}|' + mode_#{k} + ','
+               }
+               old_weight_#{k} = #{v[:weight]}
+               weight_#{k} = document.getElementById('#{@zone}_#{k}').innerHTML.replace(/[^a-zA-Z0-9.]/g,'')
+               if (weight_#{k} > max_weight){
+                  max_weight = weight_#{k}
+               }"
+            end.join("\n")
+          }
+
+          if (change_query_string[change_query_string.length-1] == ","){
+            change_query_string = change_query_string.slice(0,-1) + '&weights='
+          }
+          else{
+            change_query_string = change_query_string + '&weights='
+          }
+
+          #{
+            @weights.map do |k,v|
+              "if(weight_#{k} == 0){
+                  adjusted_weight_#{k} = 1
+               }
+               else{
+                  adjusted_weight_#{k} = Math.round(15 * (weight_#{k} / max_weight))
+               }
+              if (old_weight_#{k} != adjusted_weight_#{k}){
+                 changes['#{k}']['weight'] = [old_weight_#{k},adjusted_weight_#{k}]
+                 change_query_string = change_query_string + '#{k}|' + adjusted_weight_#{k} + ','
+              }"
+            end.join("\n")
+          }
+
+          if (change_query_string[change_query_string.length-1] == ","){
+            change_query_string = change_query_string.slice(0,-1)
+          }
+
+          //Generate html for modal body
+          #{
+            "$('##{@zone}_preview_modal_body').html('#{
+                                                        @weights.keys.map do |k|
+                                                          "<h4>#{k.capitalize}</h4><table class=\"table table-bordered\"><tr><th>Mode Changes</th><th>Weight Changes</th><tr>' + ( changes['#{k}']['mode'].length == 0 ? '<td>No Changes'  : '<td class=\"customColumn\"><strong>' + changes['#{k}']['mode'][0] + '</strong> changed to <strong>' + changes['#{k}']['mode'][1] ) + '</strong></td>' + ( changes['#{k}']['weight'].length == 0 ? '<td>No Changes'  : '<td class=\"customColumn\"><strong>' + changes['#{k}']['weight'][0] + '</strong> changed to <strong>' + changes['#{k}']['weight'][1] ) + '</strong></td></tr></table>"
+                                                        end.join
+                                                       }')"
+          }
+        }
+
+        $('##{@zone}_save_button').on('click', function (e) {
+            $('##{@zone}SaveModal').modal('show')
+        });
+
+        $('##{@zone}SaveModal').on('hidden', function () {
+          window.location.reload()
+        })
+
+        $('##{@zone}SaveModal').on('shown', function () {
+
+          //make weight changes
+          save_modal_html = "<h4>Weight Changes</h4>"
+          #{
+              @weights.keys.map do |k|
+                "if(changes['#{k}']['weight'].length != 0){
+                  var xmlHttp = null;
+                  xmlHttp = new XMLHttpRequest();
+                  xmlHttp.open( 'POST', '/savechange', false );
+                  xmlHttp.setRequestHeader('Content-type','application/x-www-form-urlencoded');
+                  xmlHttp.send( 'zone=#{@zone}&type=weight&params=#{k},' + changes['#{k}']['weight'][1] );
+                  save_modal_html  = save_modal_html + 'Changed <strong>#{k}</strong> from <strong>' + changes['#{k}']['weight'][0] + '</strong> to <strong>' + changes['#{k}']['weight'][1] + '</strong> - ' + (xmlHttp.status == 200 ? '<span class=\\'label label-success\\'>Success</span>' : '<span class=\\'label label-important\\'>Failed, error ' + xmlHttp.status + '!</span>' ) + '<br>'
+                  console.log('Still alive!')
+                }"
+              end.join
+          }
+
+          // make mode changes
+          save_modal_html = save_modal_html +  "<h4>Mode Changes</h4>"
+          #{
+              @weights.keys.map do |k|
+                "if(changes['#{k}']['mode'].length != 0){
+                  var xmlHttp = null;
+                  xmlHttp = new XMLHttpRequest();
+                  xmlHttp.open( 'POST', '/savechange', false );
+                  xmlHttp.setRequestHeader('Content-type','application/x-www-form-urlencoded');
+                  xmlHttp.send( 'zone=#{@zone}&type=mode&params=#{k},' + changes['#{k}']['mode'][1] );
+
+
+                  save_modal_html  = save_modal_html + 'Changed <strong>#{k}</strong> from <strong>' + changes['#{k}']['mode'][0] + '</strong> to <strong>' + changes['#{k}']['mode'][1] + '</strong> - ' + (xmlHttp.status == 200 ? '<span class=\\'label label-success\\'>Success</span>' : '<span class=\\'label label-important\\'>Failed, error ' + xmlHttp.status + '!</span>' ) + '<br>'
+                  console.log('Still alive!')
+                }"
+              end.join
+          }
+
+          save_modal_html  = save_modal_html + '<h5>All done!</h5>'
+          document.getElementById('#{@zone}_save_modal_body').innerHTML = save_modal_html
+          document.getElementById('#{@zone}_save_modal_footer').innerHTML = "<button class= 'btn' data-dismiss='modal' aria-hidden='true'>Close</button>"
+        });
+
+        $("[id=#{@zone}_preview_changes]").click(function(ev) {
+            ev.preventDefault();
+            processChanges()
+            $( $(this).attr('data-target') + " .modal-body").load($(this).attr("href"), function() {
+                 $($(this).attr('data-target')).modal("show");
+            });
+        });
+  });
+
+%div{:id => "chrome_fooler"}
+
+%div{:class =>"row", :style => "margin-top: 50px;"}
+  - @adjusted_weights.to_a.each_with_index do |w,i|
+    .span4
+      %h3{:align => "center"}
+        = w[0].capitalize
+        %select{:id => "#{@zone}_#{w[0]}_select"}
+          - @valid_modes.each do |m|
+            - if m == w[1][:serve_mode]
+              %option{:value => "#{m}", :selected => true}
+                = m
+            - else
+              %option{:value => "#{m}"}
+                = m
+      %h4{:align => "center", :id => "#{@zone}_#{w[0]}"}
+        = "#{w[1][:weight]}%"
+.row
+  .span12
+    %div{:id => "slider#{@zone}", :style => "margin: 10px;"}
+      - for i in 1..@adjusted_weights.length - 1
+        %a{:href => "#", :class => "ui-slider-handle", :name => "handle_#{i}"}
+
+%div{ :class => "row", :style => "margin-top: 10px;"}
+  %div{:class => "span2 offset5"}
+    %input{:type => "button", :class => "btn btn-danger", :value => "Apply Settings", "data-toggle" => "modal", :id => "#{@zone}_preview_changes", :href => "##{@zone}PreviewModal"}
+
+%div{:id => "#{@zone}PreviewModal", :class => "modal modal-large hide fade", :tabindex => "-1", :role => "dialog", "aria-labelledby" => "Changes for #{@zone}", "aria-hidden" => "true"}
+  %div{:class => "modal-header"}
+    %button{:type => "button", :class => "close", "data-dismiss" => "modal", "aria-hidden" => "true"}
+      ×
+    %h4{:id => "explainModalLabel_#{@zone}"}
+      = "Preview of Changes for #{@zone}"
+  %div{:class => "modal-body", :id => "#{@zone}_preview_modal_body"}
+    %img{:src => "/assets/img/ajax-loader.gif"}
+    Processing Changes...
+  %div{:class => "modal-footer", :id => "#{@zone}_preview_modal_footer"}
+    %a{:class => "btn btn-danger", :id => "#{@zone}_save_button", "data-dismiss" => "modal"}
+      Save
+    %button{:class => "btn", "data-dismiss" => "modal", "aria-hidden" => 'true'}
+      Cancel
+
+%div{:id => "#{@zone}SaveModal", :class => "modal modal-large hide fade", :tabindex => "-1", :role => "dialog", "aria-labelledby" => "Changes for #{@zone}", "aria-hidden" => "true"}
+  %div{:class => "modal-header"}
+    %button{:type => "button", :class => "close", "data-dismiss" => "modal", "aria-hidden" => "true"}
+      ×
+    %h4{:id => "explainModalLabel_#{@zone}"}
+      = "Saving Changes for #{@zone}"
+  %div{:class => "modal-body", :id => "#{@zone}_save_modal_body"}
+    %img{:src => "/assets/img/ajax-loader.gif"}
+    Saving Changes, please be patient...This might take a minute.
+  %div{:class => "modal-footer", :id => "#{@zone}_save_modal_footer"}
+
+%div{:class => "row", :style => "margin-top: 15px;"}
+  %h6{:align => "center"}
+    CDN Requests Balance (to Origin)
+    %p
+      - if @settings["targets"]["#{@zone}"]["graph_color_key"]
+        - @settings["targets"]["#{@zone}"]["graph_color_key"].each do |k,v|
+          %span{:style => "color:#{v};"}
+            = k
+            &middot;
+    - if @settings["targets"]["#{@zone}"]["graph_url"]
+      %img{:align => "center", :src => @settings["targets"]["#{@zone}"]["graph_url"]}

@@ -1,0 +1,15 @@
+.tabbable {
+    margin-top: 60px
+}
+
+.disabled-slider {
+    pointer-events: none;
+    cursor: default;
+}
+
+.modal-large {
+    width: 700px; /* SET THE WIDTH OF THE MODAL */
+    margin: 0 0 0 -350px; /* CHANGE MARGINS TO ACCOMODATE THE NEW WIDTH (original = margin: -250px 0 0 -280px;) */
+}
+
+td.customColumn {background-color: #a9dba9;}

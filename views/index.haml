@@ -1,0 +1,43 @@
+.container
+  .tabbable
+    %ul{:class => "nav nav-tabs", :id => "zone_tabs"}
+      - @targets.each_with_index do |t,i|
+        - if i == 0
+          %li
+            %a{:href => "##{t}", "data-toggle" => "tab"}
+              = t
+        - else
+          %li
+            %a{:href => "##{t}", "data-toggle" => "tab"}
+              = t
+  .tab-content
+    :javascript
+
+       $(document).ready(function() {
+           if (location.hash !== ''){
+              $('a[href="' + location.hash + '"]').tab('show')
+           }
+           else{
+              $('a[href=##{@targets[0]}]').click()
+           };
+           return $('a[data-toggle="tab"]').on('shown', function(e) {
+             return location.hash = $(e.target).attr('href').substr(1);
+           });
+       });
+       $('a[data-toggle="tab"]').on('shown', function (e) {
+                zone = e.target.hash.replace('#','')
+                $('#' + zone + '_weights').html("<img src='/assets/img/ajax-loader.gif'></img>Loading Data...");
+                $.ajax({
+                        url: '/zoneweights?zone=' + zone,
+                        success: function(data) {
+                            $('#' + zone + '_weights').html(data);
+                        }
+                    });
+       })
+    - @targets.each_with_index do |t,i|
+      - if i == 0
+        %div{:class => "tab-pane", :id => "#{t}"}
+          = render(:haml,:'zone_data',:locals => {:zone => t})
+      - else
+        %div{:class => "tab-pane", :id => "#{t}"}
+          = render(:haml,:'zone_data',:locals => {:zone => t})
