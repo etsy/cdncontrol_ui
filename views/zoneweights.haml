@@ -179,6 +179,14 @@
       - for i in 1..@adjusted_weights.length - 1
         %a{:href => "#", :class => "ui-slider-handle", :name => "handle_#{i}"}
 
+%div
+  %br
+  %strong
+    Note:
+  If you would like to disable a CDN, please change its mode to "No" in the select box. You can't set CDN balances to 0%.
+  %br
+  %br
+
 %div{ :class => "row", :style => "margin-top: 10px;"}
   %div{:class => "span2 offset5"}
     %input{:type => "button", :class => "btn btn-danger", :value => "Apply Settings", "data-toggle" => "modal", :id => "#{@zone}_preview_changes", :href => "##{@zone}PreviewModal"}
